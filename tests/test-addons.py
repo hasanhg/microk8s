@@ -1,38 +1,41 @@
-import pytest
 import os
 import platform
+from subprocess import PIPE, STDOUT, CalledProcessError, check_call, run
 
+import pytest
+import sh
+import yaml
+
+from utils import (
+    microk8s_disable,
+    microk8s_enable,
+    microk8s_reset,
+    wait_for_namespace_termination,
+    wait_for_pod_state,
+)
 from validators import (
-    validate_dns_dashboard,
-    validate_storage,
-    validate_ingress,
     validate_ambassador,
-    validate_gpu,
-    validate_istio,
-    validate_knative,
-    validate_registry,
-    validate_forward,
-    validate_metrics_server,
-    validate_fluentd,
-    validate_jaeger,
-    validate_linkerd,
-    validate_rbac,
     validate_cilium,
-    validate_multus,
+    validate_dns_dashboard,
+    validate_fluentd,
+    validate_forward,
+    validate_gpu,
+    validate_ingress,
+    validate_istio,
+    validate_jaeger,
+    validate_knative,
     validate_kubeflow,
+    validate_linkerd,
     validate_metallb_config,
-    validate_prometheus,
+    validate_metrics_server,
+    validate_multus,
     validate_portainer,
+    validate_prometheus,
+    validate_rbac,
+    validate_registry,
+    validate_storage,
     validate_traefik,
 )
-from utils import (
-    microk8s_enable,
-    wait_for_pod_state,
-    wait_for_namespace_termination,
-    microk8s_disable,
-    microk8s_reset,
-)
-from subprocess import PIPE, STDOUT, CalledProcessError, check_call, run
 
 
 class TestAddons(object):
@@ -351,3 +354,28 @@ class TestAddons(object):
         validate_traefik()
         print("Disabling traefik")
         microk8s_disable("traefik")
+
+
+@pytest.mark.addon_args
+def test_invalid_addon():
+    with pytest.raises(sh.ErrorReturnCode_1):
+        sh.microk8s.enable.foo()
+
+
+@pytest.mark.addon_args
+def test_help_text():
+    status = yaml.load(sh.microk8s.status(format='yaml').stdout)
+    expected = {a['name']: 'disabled' for a in status['addons']}
+    expected['ha-cluster'] = 'enabled'
+
+    assert expected == {a['name']: a['status'] for a in status['addons']}
+
+    for addon in status['addons']:
+        sh.microk8s.enable(addon['name'], '--', '--help')
+
+    assert expected == {a['name']: a['status'] for a in status['addons']}
+
+    for addon in status['addons']:
+        sh.microk8s.disable(addon['name'], '--', '--help')
+
+    assert expected == {a['name']: a['status'] for a in status['addons']}
